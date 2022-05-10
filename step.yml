@@ -1,0 +1,419 @@
+title: "Build Orchestrator"
+summary: Starts a new build with the specified Workflow(s).
+description: |-
+  The Step starts a new build of the same app. In combination with the **Bitrise Wait for Build** Step you can use this Step to start multiple builds that run in parallel at the same time. You can put this Step in a Workflow that is triggered by a code push or pull request and use this Step to trigger multiple other builds at the same time. 
+  
+  To do that, you need multiple concurrencies - at least two! You also need a Personal Access Token to use the Step: [check out our guide](https://devcenter.bitrise.io/getting-started/account-security/#generating-personal-access-tokens-manually) on how to generate the token.
+
+  If manual build approval is enabled for the project, this step won't be able to start new builds automatically.
+
+  ### Configuring the Step 
+  
+  Before you run a build with this Step, make sure you have your Personal Access Token stored in a [Secret Environment Variable](https://devcenter.bitrise.io/builds/env-vars-secret-env-vars/#adding-a-secret-env-var).
+  
+  Note that all builds you trigger using this Step will have the same build number! 
+  
+     1. Set up at least two Workflows in the Workflow Editor: one will contain the Step, the other will be triggered by the Step. 
+       You can set up as many Workflows as you wish: your number of concurrencies limit the number of Workflows you can run simultaneously.
+    2. Add the **Bitrise Start Build** Step to the part of the Workflow where you want to trigger another build. 
+    3. Add the Secret Env Var storing your Personal Access Token to the **Bitrise Access Token** input of the **Bitrise Start Build** Step: click the **Select secret variable** button, and choose the key you created.
+    4. Find the **Workflows** input of the **Bitrise Start Build** Step, and add the Workflow(s) you want to run. 
+    5. In the **Environments to share** input, add Environment Variables (Env Vars) that you want to share between the builds triggered by the Step. 
+    6. Add the **Bitrise Wait for Build** Step to the end of Workflow that contains the **Bitrise Start Build** Step. 
+    7. Add the Secret Env Var storing your Personal Access Token to the **Bitrise Access Token** input of the **Bitrise Wait for Build** Step: click the **Select secret variable** button, and choose the key you created.
+    8. In the **Build slugs** input, define the builds for the Step. 
+       The build slugs you need are stored by the **Bitrise Start Build** Step in the `$ROUTER_STARTED_BUILD_SLUGS` Env Var. As long as the builds defined by the slugs are running, the Step will hold the build it is running in. The build will fail if any of the builds included in the Step fail.
+    9. Optionally, you can save the build artifacts from the builds and configure the Step to abort all builds if any of the builds fail:
+       - In **The path of the build artifacts** input, set where you'd like to save the artifacts. 
+         The value of the input must be an actual, existing path, ending with `/`. The `BITRISE_DEPLOY_DIR` Environment Variable is NOT a valid value.
+       - Set the **Abort all builds if one fails** input to either `yes` or `no`. 
+       Please note that the build artifacts of child Workflows - Workflows triggered by this Step - will be only available if the child Workflow contains a **Deploy to Bitrise.io** Step.
+  
+  ### Troubleshooting 
+
+  - Make sure you have both the **Bitrise Start Build** and the **Bitrise Wait for Build** Steps in the right place in your initial Workflow. 
+  - Always check all your builds: if your concurrencies are taken up by other builds, this Step cannot start new ones. 
+  - Your Personal Access Token can expire! Make sure it's still valid - without it, you can't start new builds with this Step.  
+
+  ### Useful links 
+
+  - [Starting parallel builds with a single Workflow](https://devcenter.bitrise.io/builds/triggering-builds/trigger-multiple-workflows/) 
+  
+
+  ### Related Steps 
+
+  - [Bitrise Wait for Build](https://www.bitrise.io/integrations/steps/build-router-start)
+  - [Bitrise Run](https://www.bitrise.io/integrations/steps/bitrise-run)
+  - [Build Status Change](https://www.bitrise.io/integrations/steps/build-status-change)
+
+website: https://github.com/DanielJette/bitrise-step-build-orchestrator
+source_code_url: https://github.com/DanielJette/bitrise-step-build-orchestrator
+support_url: https://github.com/DanielJette/bitrise-step-build-orchestrator/issues
+
+type_tags:
+  - build
+
+is_always_run: false
+is_skippable: false
+
+toolkit:
+  go:
+    package_name: github.com/bitrise-steplib/bitrise-step-build-orchestrator
+
+inputs:
+  - forced: $FORCE_ORCHESTRATOR
+    opts:
+      title: "Force tests"
+      summary: "Force the tests to be run?"
+      description: |
+          When true, forces the tests to run for this module. Defaults to false.
+          Valid values are true or false. Usually configured with an environment variable.
+      is_required: false
+  - access_token:
+    opts:
+      title: Bitrise Access Token
+      summary: Your access token
+      description: |
+          Your access token
+          
+          To acquire a `Personal Access Token` for your user, sign in with that user on [bitrise.io](https://bitrise.io),  
+          go to your `Account Settings` page, and select the [Security tab](https://www.bitrise.io/me/profile#/security) on the left side.
+      is_required: true
+      is_expand: true
+      is_sensitive: true
+  - workflows:
+    opts:
+      title: Workflows
+      summary: The Workflow(s) to start. One Workflow per line.
+      description: The Workflow(s) to start. One Workflow per line.
+      is_required: true
+  - environment_key_list:
+    opts:
+      title: Environments to share
+      summary: The keys of the envs which will be shared with the triggered Workflows.
+      description: |-
+        The keys of the envs which will be shared with the triggered Workflows
+
+        
+        **FORMAT** Seperate the keys with new line. E.g: 
+        `ENV_1
+        ENV_2
+        ENV_3`
+      is_expand: false
+      is_required: false
+
+  - module: "$MODULE_NAME"
+    opts:
+      title: Module
+      description: |-
+        Set the module that you want to build. To see your available modules, please open your project in Android Studio and go in [Project Structure] and see the list on the left.
+      is_required: true
+
+  - module_type: "feature"
+    opts:
+      title: Module type
+      description: |-
+        The type of module to be tested. This is normally found by inspecting the path for the module.
+        For feature modules found in `./features/` this should be set to `feature`.
+        For root-level modules like `:services`, this should be set to `root`.
+        For modules found in `./testing`, this should be set to `testing`.
+        For modules found in `./design`, this should be set to `design`.
+      is_required: true
+      value_options:
+      - "feature"
+      - "root"
+      - "testing"
+      - "design"
+
+  - variant: "$VARIANT"
+    opts:
+      title: Variant
+      description: |-
+        Set the variant(s) that you want to build. To see your available variants, please open your project in Android Studio and go in [Project Structure] -> variants section. You can set multiple variants separated by \n character. For instance: - variant: myvariant1\nmyvariant2.
+      is_required: true
+
+  - target_apk: "$TARGET_APK"
+    opts:
+      title: Target APK
+      description: |-
+        The name of the APK to test. e.g. `app-debug.apk`
+      is_required: true
+
+  - test_package: "$TEST_PACKAGE"
+    opts:
+      title: Test Package
+      description: |-
+        The package name of the instrumentation tests. e.g. `com.my.app.test`
+      is_required: true
+
+  - test_runner: "androidx.test.runner.AndroidJUnitRunner"
+    opts:
+      title: Test Runner
+      description: |-
+        The fully qualified class name for the Instrumentation test runner. e.g. `androidx.test.runner.AndroidJUnitRunner`
+      is_required: true
+
+  - is_junit_5: false
+    opts:
+      title: "JUnit 5 support"
+      summary: "Do the tests require JUnit 5 support?"
+      description: |
+        Declares whether the adb test instrumentation command should include a command-line a `runnerBuilder` which support Junit 5.
+
+        Adds `-e runnerBuilder de.mannodermaus.junit5.AndroidJUnit5Builder` to the invocation.
+      is_required: true
+      value_options:
+      - true
+      - false
+
+  - github_access_token: "$GITHUB_TOKEN"
+    opts:
+      title: "GitHub personal access token"
+      description: |
+        To setup a **GitHub personal access token** visit: https://github.com/settings/tokens
+        Add repo(Full control of private repositories) scope to the generated token, to allow to comment on GitHub Pull Request or Issue.
+      is_required: true
+      is_sensitive: true
+
+  - deploy_path: "$BITRISE_DEPLOY_DIR"
+    opts:
+      title: "Deploy directory or file path"
+      description: |
+        Specify the directory or file path which will be deployed.
+        
+        If the specified path is a directory, then every file
+        in the specified directory, excluding sub-directories, will be deployed.
+        
+        To upload the directory's content
+        recursively, you should use the **Compress the artifacts into one file?** option
+        which compresses the whole directory, with
+        every sub-directory included.
+
+        If you specify a file path, then only the specified
+        file will be deployed.
+      is_required: true
+  - notify_user_groups: "everyone"
+    opts:
+      title: "Notify: User Roles"
+      description: |
+        Your App's user roles you want to notify. Separate the role names with commas.
+        Possible role names:
+
+        * none
+        * testers
+        * developers
+        * admins
+        * owner
+        * everyone
+
+        An example to notify your developers and testers:
+
+        `testers, developers`
+
+        If you want to notify everyone in the app's team, just specify `everyone`.
+
+        If you don't want to notify anyone, set this to `none`.
+  - notify_email_list:
+    opts:
+      title: "Notify: Emails"
+      description: |
+        Email addresses to notify. Separate them with commas.
+
+        You can specify any email address, the recipients
+        don't have to be in your team.
+        
+        Please note that if the email address is associated with a Bitrise account, 
+        the user must be [watching](https://devcenter.bitrise.io/builds/configuring-notifications/#watching-an-app) the app.
+      is_sensitive: true
+  - is_enable_public_page: "true"
+    opts:
+      title: "Enable public page for the App?"
+      description: |
+        If this option is enabled, a public install page
+        will be available with a long and random URL which can be shared
+        with others who are not registered on Bitrise.
+
+        If you disable this option, the **Notify: Emails** option will
+        be ignored and the **Notify: User Roles** users will receive the build's
+        URL instead of the public page's URL!
+      is_required: true
+      is_expand: false
+      value_options:
+      - "true"
+      - "false"
+  - is_compress: "false"
+    opts:
+      title: Compress the artifacts into one file?
+      summary: |-
+        If this option is set to `true` and a Deploy directory was specified, 
+        the artifacts in that directory will be compressed into a single ZIP file.
+      description: |-
+        If this option is set to `true` and a Deploy directory was specified, 
+        the artifacts in that directory will be compressed into a single ZIP file.
+        
+        You can specify a custom name for the ZIP using the `zip_name`
+        option. If you do not specify a custom name, the default `Deploy directory` name will be used.
+
+        If this option is set to `false`, the artifacts
+        found in the Deploy directory folder will be deployed
+        separately.
+      is_required: true
+      is_expand: false
+      value_options:
+        - "true"
+        - "false"
+  - public_install_page_url_map_format: "{{range $index, $element := .}}{{if $index}}|{{end}}{{$element.File}}=>{{$element.URL}}{{end}}"
+    opts:
+      title: Format for the BITRISE_PUBLIC_INSTALL_PAGE_URL_MAP output
+      summary: You can customize the format of the `BITRISE_PUBLIC_INSTALL_PAGE_URL_MAP` output so that the next Step can render the output.
+      description: |-
+        Provide a language template description using [Golang templates](https://golang.org/pkg/text/template)
+        so that the **Deploy to Bitrise.io** Step can build the required custom output.
+      is_required: true
+      is_expand: false
+  - permanent_download_url_map_format: "{{range $index, $element := .}}{{if $index}}|{{end}}{{$element.File}}=>{{$element.URL}}{{end}}"
+    opts:
+      title: Format for the BITRISE_PERMANENT_DOWNLOAD_URL_MAP output
+      summary: You can customize the format of the `BITRISE_PERMANENT_DOWNLOAD_URL_MAP` output so that the next Step can render the output.
+      description: |-
+        Provide a language template description using [Golang templates](https://golang.org/pkg/text/template)
+        so that the **Deploy to Bitrise.io** Step can build the required custom output for the permanent download URL.  
+      is_required: true
+      is_expand: false
+  - zip_name:
+    opts:
+      category: Debug
+      title: Name of the compressed artifact (without .zip extension)
+      summary: |-
+        Specify a custom name for the compressed artifact.
+      description: |-
+        If you do not specify a custom name, the Deploy directory name will be used.
+        You can specify a custom name for the ZIP using the `zip_name`
+        option. 
+
+        This option only works if you selected *true* for *is_compress*.
+  - build_url: "$BITRISE_BUILD_URL"
+    opts:
+      category: Debug
+      title: "Bitrise Build URL"
+      summary: |-
+        Unique build URL of this build on Bitrise.io
+      description: |-
+        Unique build URL of this build on Bitrise.io
+      is_required: true
+      is_dont_change_value: true
+  - build_api_token: "$BITRISE_BUILD_API_TOKEN"
+    opts:
+      category: Debug
+      title: Bitrise Build API Token
+      summary: |-
+        The build's API Token for the build on Bitrise.io
+      description: |-
+        The build's API Token for the build on Bitrise.io
+      is_required: true
+      is_dont_change_value: true
+      is_sensitive: true
+  - addon_api_base_url: "https://vdt.bitrise.io/test"
+    opts:
+      title: "Test API's base URL"
+      summary: The URL where test API is accessible.
+      description: |
+        The URL where test API is accessible.
+      is_required: true
+      is_dont_change_value: true
+  - addon_api_token: $ADDON_VDTESTING_API_TOKEN
+    opts: 
+      title: "API Token"
+      summary: The token required to authenticate with the API.
+      description: |
+        The token required to authenticate with the API.
+      is_dont_change_value: true
+      is_sensitive: true
+  - verbose: "no"
+    opts:
+      title: Enable verbose log?
+      description: |-
+        You can enable the verbose log for easier debugging.
+      is_required: true
+      value_options:
+        - "yes"
+        - "no"
+  - bundletool_version: "0.13.4"
+    opts:
+      category: Debug
+      title: "Bundletool version"
+      summary: The specific bundletool version you want to use.
+      description: |-
+        If you need a specific [bundletool version]((https://github.com/google/bundletool/releases) other than the default version,
+        you can modify the value of the **Bundletool version** required input.
+      is_required: true
+  - wait_for_builds: "false"
+    opts:
+      title: Wait for builds
+      summary: Should the Step wait for the builds to be finished?
+      description: Should the Step wait for the builds to be finished?
+      is_required: false
+      value_options:
+        - "false"
+        - "true"
+  - build_artifacts_save_path:
+    opts:
+      title: The path of the build artifacts
+      summary: The path that the build artifacts will be saved to if the **Wait for builds** input is set to `true`.
+      description: |
+          The path where build artifacts will be saved to if the **Wait for builds** input is set to `true`. 
+      
+          Please note that the path must be an actual, existing path, ending with `/`. The `BITRISE_DEPLOY_DIR` Environment Variable is NOT a valid value. 
+      
+          Note that when this Step triggers a Workflow, the artifacts of the triggered Workflow are only available to the Workflow that contains this Step, and not other Workflows. 
+          The triggered Workflow MUST have a **Deploy to Bitrise.io** Step to deploy build artifacts!
+      is_required: false
+      is_sensitive: false
+  - abort_on_fail: "no"
+    opts:
+      title: Abort all builds if any of them
+      description: |-
+        Abort all started builds if any build fails
+      is_required: true
+      is_sensitive: false
+      value_options:
+        - "yes"
+        - "no"
+outputs:
+  - BITRISE_PUBLIC_INSTALL_PAGE_URL:
+    opts:
+      title: Public Install Page URL
+      description: |-
+        Public Install Page's URL, if the
+        *Enable public page for the App?* option was *enabled*.
+  - BITRISE_PUBLIC_INSTALL_PAGE_URL_MAP:
+    opts:
+      title: Map of filenames and Public Install Page URLs
+      description: |-
+        Public Install Page URLs by the artifact's file path.
+        Only set it if the *Enable public page for the App?* option was *enabled*.
+
+        The default format is `KEY1=>VALUE|KEY2=>VALUE` but is controlled by the `public_install_page_url_map_format` input
+
+        Examples:
+
+        - $BITRISE_DEPLOY_DIR/ios_app.ipa=>https://ios_app/public/install/page
+        - $BITRISE_DEPLOY_DIR/android_app.apk=>https://android_app/public/install/page|$BITRISE_DEPLOY_DIR/ios_app.ipa=>https://ios_app/public/install/page
+  - BITRISE_PERMANENT_DOWNLOAD_URL_MAP:
+    opts:
+      title: Map of filenames and Permanent Download URLs
+      description: |-
+        The output contains permanent Download URLs for each artifact. The URLs can be shared in any communication channel and they won't expire.
+        The default format is `KEY1=>VALUE|KEY2=>VALUE` where key is the filename and the value is the URL.
+        If you change `permanent_download_url_map_format` input then that will modify the format of this Env Var.
+        You can customize the format of the multiple URLs.
+
+        Examples:
+
+        - $BITRISE_DEPLOY_DIR/ios_app.ipa=>https://app.bitrise.io/artifacts/ipa-slug/download
+        - $BITRISE_DEPLOY_DIR/android_app.apk=>https://app.bitrise.io/artifacts/apk-slug/download|$BITRISE_DEPLOY_DIR/ios_app.ipa=>https://app.bitrise.io/artifacts/ipa-slug/download
+  - ROUTER_STARTED_BUILD_SLUGS:
+    opts:
+      title: "Started Build Slugs"
+      summary: "Newline separated list of started build slugs."
+      description: "Newline separated list of started build slugs."
