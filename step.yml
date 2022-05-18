@@ -46,9 +46,9 @@ description: |-
   - [Bitrise Run](https://www.bitrise.io/integrations/steps/bitrise-run)
   - [Build Status Change](https://www.bitrise.io/integrations/steps/build-status-change)
 
-website: https://github.com/DanielJette/bitrise-step-build-orchestrator
-source_code_url: https://github.com/DanielJette/bitrise-step-build-orchestrator
-support_url: https://github.com/DanielJette/bitrise-step-build-orchestrator/issues
+website: https://github.com/neofinancial/bitrise-step-build-orchestrator
+source_code_url: https://github.com/neofinancial/bitrise-step-build-orchestrator
+support_url: https://github.com/neofinancial/bitrise-step-build-orchestrator/issues
 
 type_tags:
   - build
